@@ -18,10 +18,30 @@ export default function Page() {
     const next = [...messages, { role: 'user', content: text }]
     setMessages(next); setInput(''); setLoading(true)
     try {
-      const res = await fetch('/api', { method: 'POST', body: JSON.stringify({ messages: next }) })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data?.error || 'Fehler in /api')
-      setMessages([...next, { role: 'assistant', content: data.content }])
+      // create placeholder assistant message to stream into
+      setMessages(prev => [...prev, { role: 'assistant', content: '' }])
+      const res = await fetch('/api/stream', { method: 'POST', body: JSON.stringify({ messages: next }) })
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error || 'Fehler in /api/stream')
+      }
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let done = false
+      let acc = ''
+      while (!done) {
+        const r = await reader.read()
+        done = r.done || false
+        const chunk = decoder.decode(r.value || new Uint8Array(), { stream: true })
+        if (chunk) {
+          acc += chunk
+          setMessages(prev => {
+            const copy = prev.slice()
+            copy[copy.length - 1] = { role: 'assistant', content: acc }
+            return copy
+          })
+        }
+      }
     } catch (e: any) {
       setError(e?.message || 'Unbekannter Fehler')
     } finally {

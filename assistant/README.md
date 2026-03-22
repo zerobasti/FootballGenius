@@ -12,6 +12,8 @@ Minimaler Next.js Assistant mit Groq (llama-3.1-70b-versatile).
    - `npm run dev`
 
 ## API
+
+- Streaming: POST /api/stream (text/plain stream)
 - `POST /api` → Body: `{ messages: [{ role:'user'|'assistant', content: string }] }`
 - `GET /api/health` → `{ ok, groq, model, version, ts }`
 
