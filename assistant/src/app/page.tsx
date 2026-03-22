@@ -1,34 +1,60 @@
-'use client'
-import { useState } from 'react'
+"use client";
+
+import { useState } from "react";
+
+type Message = {
+  role: "user" | "assistant";
+  content: string;
+};
 
 export default function Page() {
-  const [messages, setMessages] = useState<{ role: 'user'|'assistant'; content: string }[]>([])
-  const [input, setInput] = useState('')
+  const [input, setInput] = useState("");
+  const [messages, setMessages] = useState<Message[]>([]);
 
-  async function send() {
-    if (!input.trim()) return
-    const next = [...messages, { role: 'user', content: input }]
-    setMessages(next)
-    setInput('')
-    const res = await fetch('/api', { method: 'POST', body: JSON.stringify({ messages: next }) })
-    const data = await res.json()
-    setMessages([...next, { role: 'assistant', content: data.content }])
+  async function sendMessage() {
+    if (!input.trim()) return;
+
+    const next: Message[] = [...messages, { role: "user", content: input }];
+    setMessages(next);
+    setInput("");
+
+    const res = await fetch("/api", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ messages: next }),
+    });
+
+    const data = await res.json();
+
+    setMessages([
+      ...next,
+      {
+        role: "assistant",
+        content: data.reply ?? "Keine Antwort erhalten.",
+      },
+    ]);
   }
 
   return (
-    <main style={{ maxWidth: 720, margin: '40px auto', padding: 16 }}>
-      <h1>FootballGenius Assistant</h1>
-      <div style={{ display: 'grid', gap: 12 }}>
-        {messages.map((m, i) => (
-          <div key={i} style={{ background: m.role==='user'?'#eef':'#efe', padding: 12, borderRadius: 8 }}>
-            <b>{m.role}:</b> {m.content}
+    <main>
+      <h1>FootballGenius</h1>
+
+      <div>
+        {messages.map((msg, i) => (
+          <div key={i}>
+            <strong>{msg.role}:</strong> {msg.content}
           </div>
         ))}
       </div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-        <input value={input} onChange={e=>setInput(e.target.value)} style={{ flex: 1, padding: 10 }} placeholder="Frage zu Taktik, Stats…" />
-        <button onClick={send}>Senden</button>
-      </div>
+
+      <input
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        placeholder="Nachricht eingeben"
+      />
+      <button onClick={sendMessage}>Senden</button>
     </main>
-  )
+  );
 }
