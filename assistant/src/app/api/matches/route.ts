@@ -13,14 +13,33 @@ function plusDaysIsoDate(days: number): string {
 }
 
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
+  try {
+    const { searchParams } = new URL(req.url);
 
-  const dateFrom = searchParams.get("dateFrom") || todayIsoDate();
-  const dateTo = searchParams.get("dateTo") || plusDaysIsoDate(7);
-  const status = searchParams.get("status") || undefined;
+    const dateFrom = searchParams.get("dateFrom") || todayIsoDate();
+    const dateTo = searchParams.get("dateTo") || plusDaysIsoDate(7);
+    const status = searchParams.get("status") || undefined;
 
+feature/football-data-matches
+    const matches = await getMatches({
+      dateFrom,
+      dateTo,
+      status,
+    });
+
+    return Response.json({ matches });
+  } catch (error) {
+    console.error("Matches API error:", error);
+
+    return Response.json(
+      { error: "Failed to fetch matches" },
+      { status: 500 }
+    );
+  }
+}
   const matches = await getMatches({
     dateFrom,
     dateTo,
     status,
   });
+main
