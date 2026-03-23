@@ -1,8 +1,8 @@
-import { getMatchById, getTeamRecentMatches } from "@/lib/football-data";
+import { getMatchById, getTeamRecentMatches } from "../../../lib/football-data";
 import {
   buildTeamFeatures,
   predictFromFeatures,
-} from "@/lib/build-features";
+} from "../../../lib/build-features";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
