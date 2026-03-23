@@ -6,7 +6,7 @@ const client = new OpenAI({
   baseURL: "https://api.groq.com/openai/v1",
 });
 
-const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+const model = "llama-3.3-70b-versatile";
 
 const system = `Du bist der FootballGenius Assistant. Antworte knapp, präzise, fußballfokussiert.
 - Wenn möglich, nutze Taktik-/Stats-Vokabular (xG, PPDA, Pressinghöhen, Box-Entries).
