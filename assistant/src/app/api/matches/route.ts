@@ -1,7 +1,4 @@
-feature/football-data-matches
 import { getMatches } from "../../../lib/football-data";
-import { getMatches } from "@/lib/football-data";
-main
 
 export const runtime = "nodejs";
 
@@ -27,5 +24,3 @@ export async function GET(req: Request) {
     dateTo,
     status,
   });
-
-  return Response.json({ matches });
