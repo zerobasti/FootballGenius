@@ -1,4 +1,4 @@
-import { getMatches } from "@/lib/football-data";
+import { getMatches } from "../../../lib/football-data";
 
 export const runtime = "nodejs";
 
