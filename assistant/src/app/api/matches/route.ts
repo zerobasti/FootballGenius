@@ -24,6 +24,3 @@ export async function GET(req: Request) {
     dateTo,
     status,
   });
-
-  return Response.json({ matches });
-}
