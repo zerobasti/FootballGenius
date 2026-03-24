@@ -1,6 +1,7 @@
 import { getMatches } from "../../../lib/football-data";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
@@ -36,9 +37,3 @@ export async function GET(req: Request) {
     );
   }
 }
-  const matches = await getMatches({
-    dateFrom,
-    dateTo,
-    status,
-  });
-main
