@@ -1,19 +1,16 @@
 import { getMatchById, getTeamRecentMatches } from "../../../lib/football-data";
-import {
-  buildTeamFeatures,
-  predictFromFeatures,
-} from "../../../lib/build-features";
+import { buildTeamElo, predictFromElo } from "../../../lib/elo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function toPredictionLabel(prediction, match) {
+function toPredictionLabel(prediction: string, match: any) {
   if (prediction === "home_win") return `${match.homeTeam} gewinnt`;
   if (prediction === "away_win") return `${match.awayTeam} gewinnt`;
   return "Unentschieden";
 }
 
-export async function POST(req) {
+export async function POST(req: Request) {
   try {
     const body = await req.json();
     const matchId = Number(body?.matchId);
@@ -42,14 +39,21 @@ export async function POST(req) {
     }
 
     const [homeRecent, awayRecent] = await Promise.all([
-      getTeamRecentMatches(match.homeTeamId, 5),
-      getTeamRecentMatches(match.awayTeamId, 5),
+      getTeamRecentMatches(match.homeTeamId, 8),
+      getTeamRecentMatches(match.awayTeamId, 8),
     ]);
 
-    const homeFeatures = buildTeamFeatures(match.homeTeamId, homeRecent);
-    const awayFeatures = buildTeamFeatures(match.awayTeamId, awayRecent);
+    if (!homeRecent.length || !awayRecent.length) {
+      return Response.json(
+        { error: "not enough recent match data for prediction" },
+        { status: 400 }
+      );
+    }
 
-    const result = predictFromFeatures(homeFeatures, awayFeatures);
+    const homeElo = buildTeamElo(match.homeTeamId, homeRecent);
+    const awayElo = buildTeamElo(match.awayTeamId, awayRecent);
+
+    const result = predictFromElo(homeElo.rating, awayElo.rating);
 
     return Response.json({
       match: {
@@ -63,23 +67,15 @@ export async function POST(req) {
       prediction: result.prediction,
       label: toPredictionLabel(result.prediction, match),
       confidence: result.confidence,
-      modelScore: result.score,
-      explanation: {
-        formDiff: Number((homeFeatures.form - awayFeatures.form).toFixed(2)),
-        goalsScoredDiff: Number(
-          (homeFeatures.goalsScored - awayFeatures.goalsScored).toFixed(2)
-        ),
-        goalsConcededDiff: Number(
-          (homeFeatures.goalsConceded - awayFeatures.goalsConceded).toFixed(2)
-        ),
-        pointsPerGameDiff: Number(
-          (homeFeatures.pointsPerGame - awayFeatures.pointsPerGame).toFixed(2)
-        ),
-        homeAdvantage: 0.1,
+      elo: {
+        home: homeElo,
+        away: awayElo,
+        diff: result.eloDiff,
       },
-      features: {
-        home: homeFeatures,
-        away: awayFeatures,
+      probabilities: result.probabilities,
+      diagnostics: {
+        homeRecentMatches: homeRecent.length,
+        awayRecentMatches: awayRecent.length,
       },
     });
   } catch (error) {
