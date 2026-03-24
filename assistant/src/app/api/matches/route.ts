@@ -20,7 +20,6 @@ export async function GET(req: Request) {
     const dateTo = searchParams.get("dateTo") || plusDaysIsoDate(7);
     const status = searchParams.get("status") || undefined;
 
-feature/football-data-matches
     const matches = await getMatches({
       dateFrom,
       dateTo,
