@@ -1,41 +1,88 @@
-import { NextResponse } from "next/server";
-import OpenAI from "openai";
+import { getMatchById, getTeamRecentMatches } from "../../../lib/football-data";
+import { buildTeamElo, predictFromElo } from "../../../lib/elo";
 
-const client = new OpenAI({
-  apiKey: process.env.GROQ_API_KEY,
-  baseURL: "https://api.groq.com/openai/v1",
-});
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-const model = "llama-3.3-70b-versatile";
-
-const system = `Du bist der FootballGenius Assistant. Antworte knapp, präzise, fußballfokussiert.
-- Wenn möglich, nutze Taktik-/Stats-Vokabular (xG, PPDA, Pressinghöhen, Box-Entries).
-- Sei ehrlich über Unsicherheiten. Keine Halluzinationen.
-- Output auf Deutsch.`;
+function toPredictionLabel(prediction: string, match: any) {
+  if (prediction === "home_win") return `${match.homeTeam} gewinnt`;
+  if (prediction === "away_win") return `${match.awayTeam} gewinnt`;
+  return "Unentschieden";
+}
 
 export async function POST(req: Request) {
   try {
-    const { messages = [] } = await req.json();
+    const body = await req.json();
+    const matchId = Number(body?.matchId);
 
-    const chat = [
-      { role: "system", content: system },
-      ...messages,
-    ] as any;
+    if (!matchId || Number.isNaN(matchId)) {
+      return Response.json(
+        { error: "matchId is required" },
+        { status: 400 }
+      );
+    }
 
-    const resp = await client.chat.completions.create({
-      model,
-      messages: chat,
-      temperature: 0.2,
-      stream: false,
+    const match = await getMatchById(matchId);
+
+    if (!match) {
+      return Response.json(
+        { error: "match not found" },
+        { status: 404 }
+      );
+    }
+
+    if (!match.homeTeamId || !match.awayTeamId) {
+      return Response.json(
+        { error: "team ids missing on match" },
+        { status: 500 }
+      );
+    }
+
+    const [homeRecent, awayRecent] = await Promise.all([
+      getTeamRecentMatches(match.homeTeamId, 8),
+      getTeamRecentMatches(match.awayTeamId, 8),
+    ]);
+
+    if (!homeRecent.length || !awayRecent.length) {
+      return Response.json(
+        { error: "not enough recent match data for prediction" },
+        { status: 400 }
+      );
+    }
+
+    const homeElo = buildTeamElo(match.homeTeamId, homeRecent);
+    const awayElo = buildTeamElo(match.awayTeamId, awayRecent);
+
+    const result = predictFromElo(homeElo.rating, awayElo.rating);
+
+    return Response.json({
+      match: {
+        id: match.id,
+        homeTeam: match.homeTeam,
+        awayTeam: match.awayTeam,
+        utcDate: match.utcDate,
+        status: match.status,
+        competition: match.competition || null,
+      },
+      prediction: result.prediction,
+      label: toPredictionLabel(result.prediction, match),
+      confidence: result.confidence,
+      elo: {
+        home: homeElo,
+        away: awayElo,
+        diff: result.eloDiff,
+      },
+      probabilities: result.probabilities,
+      diagnostics: {
+        homeRecentMatches: homeRecent.length,
+        awayRecentMatches: awayRecent.length,
+      },
     });
+  } catch (error) {
+    console.error("predict error:", error);
 
-    const reply = resp.choices?.[0]?.message?.content ?? "";
-
-    return NextResponse.json({ reply });
-  } catch (error: any) {
-    console.error("API error:", error);
-    return NextResponse.json(
-      { error: error?.message || "Unbekannter Fehler" },
+    return Response.json(
+      { error: "failed to build prediction" },
       { status: 500 }
     );
   }
