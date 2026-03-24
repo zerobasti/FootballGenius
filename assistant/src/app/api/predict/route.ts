@@ -1,4 +1,4 @@
-import { getMatchById, getTeamRecentMatches } from "../../../lib/football-data";
+import { getTeamRecentMatches } from "../../../lib/football-data";
 import { buildTeamElo, predictFromElo } from "../../../lib/elo";
 
 export const runtime = "nodejs";
@@ -13,28 +13,19 @@ function toPredictionLabel(prediction: string, match: any) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const matchId = Number(body?.matchId);
-
-    if (!matchId || Number.isNaN(matchId)) {
-      return Response.json(
-        { error: "matchId is required" },
-        { status: 400 }
-      );
-    }
-
-    const match = await getMatchById(matchId);
+    const match = body?.match;
 
     if (!match) {
       return Response.json(
-        { error: "match not found" },
-        { status: 404 }
+        { error: "match payload is required" },
+        { status: 400 }
       );
     }
 
     if (!match.homeTeamId || !match.awayTeamId) {
       return Response.json(
-        { error: "team ids missing on match" },
-        { status: 500 }
+        { error: "invalid match payload" },
+        { status: 400 }
       );
     }
 
@@ -57,12 +48,12 @@ export async function POST(req: Request) {
 
     return Response.json({
       match: {
-        id: match.id,
+        id: match.id ?? null,
         homeTeam: match.homeTeam,
         awayTeam: match.awayTeam,
-        utcDate: match.utcDate,
-        status: match.status,
-        competition: match.competition || null,
+        utcDate: match.utcDate ?? null,
+        status: match.status ?? null,
+        competition: match.competition ?? null,
       },
       prediction: result.prediction,
       label: toPredictionLabel(result.prediction, match),
@@ -78,11 +69,14 @@ export async function POST(req: Request) {
         awayRecentMatches: awayRecent.length,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("predict error:", error);
 
     return Response.json(
-      { error: "failed to build prediction" },
+      {
+        error: "failed to build prediction",
+        details: error?.message || String(error),
+      },
       { status: 500 }
     );
   }
