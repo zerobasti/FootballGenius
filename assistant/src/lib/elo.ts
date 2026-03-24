@@ -4,14 +4,16 @@ type EloSnapshot = {
   matchesUsed: number;
 };
 
+type Probabilities = {
+  homeWin: number;
+  draw: number;
+  awayWin: number;
+};
+
 type EloPrediction = {
   prediction: "home_win" | "draw" | "away_win";
   confidence: number;
-  probabilities: {
-    homeWin: number;
-    draw: number;
-    awayWin: number;
-  };
+  probabilities: Probabilities;
   eloDiff: number;
 };
 
@@ -75,6 +77,49 @@ function dynamicK(goalDiff: number, weight: number) {
   return baseK * goalDiffMultiplier(goalDiff) * weight;
 }
 
+function normalizeProbabilities(prob: Probabilities): Probabilities {
+  const total = prob.homeWin + prob.draw + prob.awayWin;
+
+  if (total <= 0) {
+    return {
+      homeWin: 0.33,
+      draw: 0.34,
+      awayWin: 0.33,
+    };
+  }
+
+  return {
+    homeWin: round(prob.homeWin / total),
+    draw: round(prob.draw / total),
+    awayWin: round(prob.awayWin / total),
+  };
+}
+
+function getDecisionConfidence(prob: Probabilities) {
+  const values = [prob.homeWin, prob.draw, prob.awayWin].sort((a, b) => b - a);
+  return round(values[0] - values[1]);
+}
+
+export function decideOutcome(prob: Probabilities): "home_win" | "draw" | "away_win" {
+  const { homeWin, draw, awayWin } = prob;
+
+  const max = Math.max(homeWin, draw, awayWin);
+
+  if (max < 0.5) {
+    return "draw";
+  }
+
+  if (homeWin === max && homeWin - awayWin > 0.1) {
+    return "home_win";
+  }
+
+  if (awayWin === max && awayWin - homeWin > 0.1) {
+    return "away_win";
+  }
+
+  return "draw";
+}
+
 export function buildTeamElo(teamId: number, matches: any[]): EloSnapshot {
   if (!matches?.length) {
     return {
@@ -126,8 +171,6 @@ export function predictFromElo(
   const expectedHomeNoDraw = expectedScore(adjustedHome, awayRating);
   const eloDiff = adjustedHome - awayRating;
 
-  // Draw-Wahrscheinlichkeit:
-  // höher bei engen Spielen, niedriger bei klaren Elo-Unterschieden
   const drawProb = clamp(
     0.18 + Math.exp(-Math.abs(eloDiff) / 120) * 0.12,
     0.14,
@@ -135,30 +178,21 @@ export function predictFromElo(
   );
 
   const decisiveMass = 1 - drawProb;
-  const homeWinProb = expectedHomeNoDraw * decisiveMass;
-  const awayWinProb = (1 - expectedHomeNoDraw) * decisiveMass;
 
-  let prediction: "home_win" | "draw" | "away_win" = "draw";
-  let confidence = drawProb;
+  const rawProbabilities = {
+    homeWin: expectedHomeNoDraw * decisiveMass,
+    draw: drawProb,
+    awayWin: (1 - expectedHomeNoDraw) * decisiveMass,
+  };
 
-  if (homeWinProb >= awayWinProb && homeWinProb >= drawProb) {
-    prediction = "home_win";
-    confidence = homeWinProb;
-  } else if (awayWinProb >= homeWinProb && awayWinProb >= drawProb) {
-    prediction = "away_win";
-    confidence = awayWinProb;
-  }
-
-  const total = homeWinProb + drawProb + awayWinProb;
+  const probabilities = normalizeProbabilities(rawProbabilities);
+  const prediction = decideOutcome(probabilities);
+  const confidence = getDecisionConfidence(probabilities);
 
   return {
     prediction,
-    confidence: round(confidence / total),
-    probabilities: {
-      homeWin: round(homeWinProb / total),
-      draw: round(drawProb / total),
-      awayWin: round(awayWinProb / total),
-    },
+    confidence,
+    probabilities,
     eloDiff: round(eloDiff),
   };
 }
