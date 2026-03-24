@@ -54,7 +54,7 @@ export function buildTeamFeatures(teamId, matches) {
 }
 
 export function predictFromFeatures(home, away) {
-  const edge =
+  const score =
     (home.form - away.form) * 0.45 +
     (home.goalsScored - away.goalsScored) * 0.3 -
     (home.goalsConceded - away.goalsConceded) * 0.15 +
@@ -62,17 +62,17 @@ export function predictFromFeatures(home, away) {
 
   let prediction = "draw";
 
-  if (edge > 0.18) prediction = "home_win";
-  else if (edge < -0.18) prediction = "away_win";
+  if (score > 0.18) prediction = "home_win";
+  else if (score < -0.18) prediction = "away_win";
 
   const confidence = Math.max(
     0.5,
-    Math.min(0.88, 0.5 + Math.abs(edge) * 0.55)
+    Math.min(0.88, 0.5 + Math.abs(score) * 0.55)
   );
 
   return {
     prediction,
     confidence: round(confidence),
-    score: round(edge),
+    score: round(score),
   };
 }
