@@ -1,34 +1,30 @@
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
-}
+type EloSnapshot = {
+  rating: number;
+  trend: number;
+  matchesUsed: number;
+};
+
+type EloPrediction = {
+  prediction: "home_win" | "draw" | "away_win";
+  confidence: number;
+  probabilities: {
+    homeWin: number;
+    draw: number;
+    awayWin: number;
+  };
+  eloDiff: number;
+};
 
 function round(value: number) {
   return Math.round(value * 100) / 100;
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
 function expectedScore(ratingA: number, ratingB: number) {
   return 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
-}
-
-function actualScoreForTeam(match: any, teamId: number) {
-  const isHome = match.homeTeamId === teamId;
-
-  if (match.score?.winner === "DRAW") return 0.5;
-  if (isHome && match.score?.winner === "HOME_TEAM") return 1;
-  if (!isHome && match.score?.winner === "AWAY_TEAM") return 1;
-  return 0;
-}
-
-function goalDiffForTeam(match: any, teamId: number) {
-  const isHome = match.homeTeamId === teamId;
-  const gf = isHome
-    ? (match.score?.fullTime?.home ?? 0)
-    : (match.score?.fullTime?.away ?? 0);
-  const ga = isHome
-    ? (match.score?.fullTime?.away ?? 0)
-    : (match.score?.fullTime?.home ?? 0);
-
-  return gf - ga;
 }
 
 function sortOldestFirst(matches: any[]) {
@@ -37,14 +33,49 @@ function sortOldestFirst(matches: any[]) {
   );
 }
 
-function kFactorFromGoalDiff(goalDiff: number) {
-  const abs = Math.abs(goalDiff);
-  if (abs <= 1) return 24;
-  if (abs === 2) return 28;
-  return 32;
+function getGoalsForAgainst(match: any, teamId: number) {
+  const isHome = match.homeTeamId === teamId;
+
+  const goalsFor = isHome
+    ? (match.score?.fullTime?.home ?? 0)
+    : (match.score?.fullTime?.away ?? 0);
+
+  const goalsAgainst = isHome
+    ? (match.score?.fullTime?.away ?? 0)
+    : (match.score?.fullTime?.home ?? 0);
+
+  return { goalsFor, goalsAgainst };
 }
 
-export function buildTeamElo(teamId: number, matches: any[]) {
+function actualScore(match: any, teamId: number) {
+  const isHome = match.homeTeamId === teamId;
+
+  if (match.score?.winner === "DRAW") return 0.5;
+  if (isHome && match.score?.winner === "HOME_TEAM") return 1;
+  if (!isHome && match.score?.winner === "AWAY_TEAM") return 1;
+  return 0;
+}
+
+function recencyWeight(index: number, total: number) {
+  if (total <= 1) return 1;
+  const normalized = index / (total - 1);
+  return 0.75 + normalized * 0.5;
+}
+
+function goalDiffMultiplier(goalDiff: number) {
+  const abs = Math.abs(goalDiff);
+  if (abs <= 1) return 1;
+  if (abs === 2) return 1.15;
+  if (abs === 3) return 1.3;
+  return 1.45;
+}
+
+function dynamicK(goalDiff: number, weight: number) {
+  const baseK = 24;
+  return baseK * goalDiffMultiplier(goalDiff) * weight;
+}
+
+export function buildTeamElo(teamId: number, matches: any[]): EloSnapshot {
   if (!matches?.length) {
     return {
       rating: 1500,
@@ -53,17 +84,27 @@ export function buildTeamElo(teamId: number, matches: any[]) {
     };
   }
 
-  let rating = 1500;
   const ordered = sortOldestFirst(matches);
+  let rating = 1500;
 
-  for (const match of ordered) {
+  for (let i = 0; i < ordered.length; i++) {
+    const match = ordered[i];
     const isHome = match.homeTeamId === teamId;
-    const venueAdjustedOpponent = 1500 + (isHome ? -45 : 45);
 
-    const expected = expectedScore(rating, venueAdjustedOpponent);
-    const actual = actualScoreForTeam(match, teamId);
-    const goalDiff = goalDiffForTeam(match, teamId);
-    const k = kFactorFromGoalDiff(goalDiff);
+    const weight = recencyWeight(i, ordered.length);
+    const opponentBase = 1500;
+    const homeAdvantage = 55;
+
+    const opponentAdjusted = isHome
+      ? opponentBase - homeAdvantage
+      : opponentBase + homeAdvantage;
+
+    const expected = expectedScore(rating, opponentAdjusted);
+    const actual = actualScore(match, teamId);
+
+    const { goalsFor, goalsAgainst } = getGoalsForAgainst(match, teamId);
+    const gd = goalsFor - goalsAgainst;
+    const k = dynamicK(gd, weight);
 
     rating = rating + k * (actual - expected);
   }
@@ -75,21 +116,27 @@ export function buildTeamElo(teamId: number, matches: any[]) {
   };
 }
 
-export function predictFromElo(homeElo: number, awayElo: number) {
+export function predictFromElo(
+  homeRating: number,
+  awayRating: number
+): EloPrediction {
   const homeAdvantage = 55;
-  const adjHome = homeElo + homeAdvantage;
-  const homeExpected = expectedScore(adjHome, awayElo);
+  const adjustedHome = homeRating + homeAdvantage;
 
-  const diff = adjHome - awayElo;
+  const expectedHomeNoDraw = expectedScore(adjustedHome, awayRating);
+  const eloDiff = adjustedHome - awayRating;
 
+  // Draw-Wahrscheinlichkeit:
+  // höher bei engen Spielen, niedriger bei klaren Elo-Unterschieden
   const drawProb = clamp(
-    0.16 + Math.exp(-Math.abs(diff) / 140) * 0.14,
-    0.12,
+    0.18 + Math.exp(-Math.abs(eloDiff) / 120) * 0.12,
+    0.14,
     0.30
   );
 
-  const homeWinProb = homeExpected * (1 - drawProb);
-  const awayWinProb = (1 - homeExpected) * (1 - drawProb);
+  const decisiveMass = 1 - drawProb;
+  const homeWinProb = expectedHomeNoDraw * decisiveMass;
+  const awayWinProb = (1 - expectedHomeNoDraw) * decisiveMass;
 
   let prediction: "home_win" | "draw" | "away_win" = "draw";
   let confidence = drawProb;
@@ -102,14 +149,16 @@ export function predictFromElo(homeElo: number, awayElo: number) {
     confidence = awayWinProb;
   }
 
+  const total = homeWinProb + drawProb + awayWinProb;
+
   return {
     prediction,
-    confidence: round(confidence),
+    confidence: round(confidence / total),
     probabilities: {
-      homeWin: round(homeWinProb),
-      draw: round(drawProb),
-      awayWin: round(awayWinProb),
+      homeWin: round(homeWinProb / total),
+      draw: round(drawProb / total),
+      awayWin: round(awayWinProb / total),
     },
-    eloDiff: round(diff),
+    eloDiff: round(eloDiff),
   };
 }
