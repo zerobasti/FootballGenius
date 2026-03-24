@@ -1,26 +1,4 @@
-type MatchSummary = {
-  id: number;
-  homeTeam: string;
-  awayTeam: string;
-  utcDate: string;
-  status: string;
-  competition?: string;
-  homeTeamId?: number;
-  awayTeamId?: number;
-  score?: {
-    winner?: string | null;
-    fullTime?: {
-      home?: number | null;
-      away?: number | null;
-    };
-    halfTime?: {
-      home?: number | null;
-      away?: number | null;
-    };
-  };
-};
-
-function getApiToken(): string {
+function getApiToken() {
   return (
     process.env.FOOTBALL_DATA_API_KEY ||
     process.env.FOOTBALL_DATA_TOKEN ||
@@ -28,7 +6,7 @@ function getApiToken(): string {
   );
 }
 
-function mapMatch(m: any): MatchSummary {
+function mapMatch(m) {
   return {
     id: m.id,
     homeTeam: m.homeTeam?.name || "",
@@ -52,11 +30,7 @@ function mapMatch(m: any): MatchSummary {
   };
 }
 
-export async function getMatches(params: {
-  dateFrom: string;
-  dateTo: string;
-  status?: string;
-}) {
+export async function getMatches(params) {
   const url = new URL("https://api.football-data.org/v4/matches");
 
   url.searchParams.set("dateFrom", params.dateFrom);
@@ -88,10 +62,7 @@ export async function getMatches(params: {
   return data.matches.map(mapMatch);
 }
 
-export async function getTeamRecentMatches(
-  teamId: number,
-  limit = 5
-): Promise<MatchSummary[]> {
+export async function getTeamRecentMatches(teamId, limit = 5) {
   const url = new URL(`https://api.football-data.org/v4/teams/${teamId}/matches`);
   url.searchParams.set("status", "FINISHED");
   url.searchParams.set("limit", String(limit));
@@ -118,8 +89,9 @@ export async function getTeamRecentMatches(
   return data.matches.map(mapMatch);
 }
 
-export async function getMatchById(matchId: number): Promise<MatchSummary | null> {
+export async function getMatchById(matchId) {
   const today = new Date();
+
   const from = new Date(today);
   from.setUTCDate(from.getUTCDate() - 30);
 

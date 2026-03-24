@@ -7,7 +7,7 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request) {
+export async function POST(req) {
   try {
     const body = await req.json();
     const matchId = Number(body?.matchId);
@@ -63,10 +63,10 @@ export async function POST(req: Request) {
       },
     });
   } catch (error) {
-    console.error("predict-live error:", error);
+    console.error("predict error:", error);
 
     return Response.json(
-      { error: "failed to build live prediction" },
+      { error: "failed to build prediction" },
       { status: 500 }
     );
   }
